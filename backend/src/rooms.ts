@@ -1,0 +1,19 @@
+import {createGame,draw,pass,play,type GameState,type PlacedTile,type Tile} from '@daeef/game-engine';import type {Difficulty,GamePhase,PlayerKind,RoomSummary} from '@daeef/shared';import {randomUUID} from 'node:crypto';
+export interface RoomPlayer{id:string;name:string;kind:PlayerKind;difficulty?:Difficulty;connected:boolean}
+export interface Room{code:string;hostId:string;players:RoomPlayer[];targetScore:number;phase:GamePhase;game?:GameState}
+export interface PlayerGameView extends RoomSummary{board:PlacedTile[];stockCount:number;currentPlayerId?:string;hand:Tile[]}
+const code=()=>Math.random().toString(36).slice(2,6).toUpperCase().padEnd(4,'0');
+export class RoomStore{
+ readonly rooms=new Map<string,Room>();
+ create(id:string,name:string,targetScore=100):Room{if(![50,100,150,200].includes(targetScore))throw new Error('Invalid target score');let roomCode=code();while(this.rooms.has(roomCode))roomCode=code();const room:Room={code:roomCode,hostId:id,players:[{id,name,kind:'human',connected:true}],targetScore,phase:'lobby'};this.rooms.set(roomCode,room);return room}
+ get(roomCode:string):Room{const room=this.rooms.get(roomCode.toUpperCase());if(!room)throw new Error('Room not found');return room}
+ findRoomsForPlayer(id:string):Room[]{return [...this.rooms.values()].filter(room=>room.players.some(player=>player.id===id))}
+ join(roomCode:string,id:string,name:string):Room{const room=this.get(roomCode);const existing=room.players.find(player=>player.id===id);if(existing){existing.connected=true;return room}if(room.phase!=='lobby')throw new Error('Game has already started');if(room.players.length>=4)throw new Error('Room is full');room.players.push({id,name,kind:'human',connected:true});return room}
+ addBot(room:Room,difficulty:Difficulty):void{if(room.phase!=='lobby'||room.players.length>=4)throw new Error('Cannot add bot');room.players.push({id:`bot-${randomUUID()}`,name:`Bot ${room.players.filter(p=>p.kind==='bot').length+1}`,kind:'bot',difficulty,connected:true})}
+ removeBot(room:Room,playerId:string):void{if(room.phase!=='lobby')throw new Error('Cannot remove bot');const player=room.players.find(item=>item.id===playerId);if(!player||player.kind!=='bot')throw new Error('Bot not found');room.players=room.players.filter(item=>item.id!==playerId)}
+ start(room:Room,id:string):void{if(room.hostId!==id)throw new Error('Only host can start');if(room.players.length<2)throw new Error('Need at least 2 players');room.game=createGame(room.players.map(p=>p.id),room.targetScore);room.phase='playing'}
+ summary(room:Room):RoomSummary{return{code:room.code,hostId:room.hostId,phase:room.phase,targetScore:room.targetScore,players:room.players.map((player,index)=>({id:player.id,name:player.name,kind:player.kind,connected:player.connected,score:room.game?.players[index].score??0,tileCount:room.game?.players[index].hand.length??0}))}}
+ viewFor(room:Room,playerId:string):PlayerGameView{const game=room.game;const player=game?.players.find(item=>item.id===playerId);return{...this.summary(room),board:game?.board??[],stockCount:game?.stock.length??0,currentPlayerId:game?.players[game.current]?.id,hand:player?.hand??[]}}
+ action(room:Room,id:string,type:'play'|'draw'|'pass',data?:{tileId:string;end:'left'|'right'}):void{if(!room.game||room.phase!=='playing')throw new Error('Game is not active');if(type==='play')play(room.game,id,data!.tileId,data!.end);else if(type==='draw')draw(room.game,id);else pass(room.game,id);if(room.game.roundOver)room.phase=room.game.winnerId?'game-over':'round-over'}
+ disconnect(id:string):Room[]{const updated:Room[]=[];for(const room of this.rooms.values()){const player=room.players.find(p=>p.id===id);if(player){player.connected=false;updated.push(room)}}return updated}
+}
