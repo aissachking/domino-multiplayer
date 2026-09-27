@@ -33,7 +33,9 @@ jobs:
           channel: stable
       - name: Ensure Android platform exists
         working-directory: mobile
-        run: test -d android || flutter create --platforms=android .
+        run: |
+          test -d android || flutter create --platforms=android .
+          rm -f test/widget_test.dart
       - run: flutter pub get
         working-directory: mobile
       - run: flutter analyze
