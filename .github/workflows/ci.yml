@@ -1,0 +1,49 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Backend health smoke test
+        shell: bash
+        run: |
+          PORT=3100 npm start > /tmp/daeef-backend.log 2>&1 &
+          pid=$!
+          trap 'kill $pid || true' EXIT
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3100/health; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/daeef-backend.log
+          exit 1
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Ensure Android platform exists
+        working-directory: mobile
+        run: test -d android || flutter create --platforms=android .
+      - run: flutter pub get
+        working-directory: mobile
+      - run: flutter analyze
+        working-directory: mobile
+      - run: flutter test
+        working-directory: mobile
+      - run: flutter build apk --debug
+        working-directory: mobile
+      - uses: actions/upload-artifact@v4
+        with:
+          name: daeef-jiddan-debug-apk
+          path: mobile/build/app/outputs/flutter-apk/app-debug.apk
