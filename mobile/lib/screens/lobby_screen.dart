@@ -54,7 +54,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
               }),
               OutlinedButton.icon(
                 onPressed: players.length < 4
-                    ? () => setState(() => players.add('Bot ' + players.length.toString()))
+                    ? () => setState(() => players.add('Bot ${players.length}'))
                     : null,
                 icon: const Icon(Icons.add),
                 label: const Text('إضافة بوت'),
@@ -64,7 +64,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 items: const ['سهل', 'عادي', 'صعب', 'خبير']
                     .map((x) => DropdownMenuItem(
                           value: x,
-                          child: Text('صعوبة البوت: ' + x),
+                          child: Text('صعوبة البوت: $x'),
                         ))
                     .toList(),
                 onChanged: (value) {
