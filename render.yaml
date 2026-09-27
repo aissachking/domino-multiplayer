@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: daeef-jiddan-api
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run start -w @daeef/backend
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGIN
+        sync: false
