@@ -62,7 +62,10 @@ class _LobbyScreenState extends State<LobbyScreen> {
               DropdownButtonFormField<String>(
                 initialValue: difficulty,
                 items: const ['سهل', 'عادي', 'صعب', 'خبير']
-                    .map((x) => DropdownMenuItem(value: x, child: Text('صعوبة البوت: ' + x)))
+                    .map((x) => DropdownMenuItem(
+                          value: x,
+                          child: Text('صعوبة البوت: ' + x),
+                        ))
                     .toList(),
                 onChanged: (value) {
                   if (value != null) setState(() => difficulty = value);
@@ -71,7 +74,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
               const Spacer(),
               FilledButton(
                 onPressed: () => Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => const TableScreen()),
+                  context,
+                  MaterialPageRoute(builder: (_) => const TableScreen()),
                 ),
                 child: const Padding(
                   padding: EdgeInsets.all(14),
