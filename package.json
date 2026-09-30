@@ -1,0 +1,22 @@
+{
+  "name": "daeef-jiddan-domino",
+  "private": true,
+  "workspaces": [
+    "game-engine",
+    "ai",
+    "shared",
+    "backend"
+  ],
+  "scripts": {
+    "build": "npm run build -w @daeef/shared && npm run build -w @daeef/game-engine && npm run build -w @daeef/ai && npm run build -w @daeef/backend",
+    "typecheck": "npm run typecheck -w @daeef/shared && npm run typecheck -w @daeef/game-engine && npm run typecheck -w @daeef/ai && npm run typecheck -w @daeef/backend",
+    "test": "npm run test -w @daeef/game-engine && npm run test -w @daeef/ai && npm run test -w @daeef/backend"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node": "^22.10.2"
+  }
+}

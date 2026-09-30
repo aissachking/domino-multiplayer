@@ -1,0 +1,2 @@
+import test from 'node:test'; import assert from 'node:assert/strict'; import { createGame, play, legalEnds } from '@daeef/game-engine'; import { chooseMove } from './index.js';
+test('bot chooses a legal move for every difficulty', () => { for (const difficulty of ['easy','normal','hard','expert'] as const) { const g=createGame(['bot','p']); const move=chooseMove(g,difficulty,()=>0); assert.ok(move); assert.ok(legalEnds(g,move!.tile).includes(move!.end)); play(g,'bot',move!.tile.id,move!.end); } });
