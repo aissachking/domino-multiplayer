@@ -1,1 +1,33 @@
-{"name":"@daeef/backend","version":"0.1.0","type":"module","main":"./dist/server.js","scripts":{"build":"tsc","typecheck":"tsc --noEmit","test":"npm run build && node --test dist/*.test.js","start":"node dist/server.js","dev":"tsx watch src/server.ts"},"dependencies":{"@daeef/ai":"0.1.0","@daeef/game-engine":"0.1.0","@daeef/shared":"0.1.0","cors":"^2.8.5","dotenv":"^16.4.7","express":"^4.21.2","socket.io":"^4.8.1"},"devDependencies":{"@types/cors":"^2.8.17","@types/express":"^5.0.1","@types/node":"^22.10.2","tsx":"^4.19.2","typescript":"^5.7.3"}}
+{
+  "name": "@daeef/backend",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "test": "tsc -p . && node --test --test-concurrency=1 dist/*.test.js",
+    "start": "node dist/main.js",
+    "migrate": "node dist/migrate.js",
+    "dev": "tsc -p . && node dist/main.js"
+  },
+  "dependencies": {
+    "@daeef/ai": "0.2.0",
+    "@daeef/game-engine": "0.2.0",
+    "@daeef/shared": "0.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "pg": "^8.13.1",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "socket.io-client": "^4.8.1",
+    "typescript": "^5.7.3"
+  }
+}
