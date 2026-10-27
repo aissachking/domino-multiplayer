@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "node build.mjs --dev",
-    "build": "node build.mjs",
+    "build": "node scripts/ensure-esbuild.mjs && node build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/balance.test.ts",
     "test:e2e": "python3 tests/e2e.py",
