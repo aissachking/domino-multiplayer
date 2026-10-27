@@ -1,0 +1,33 @@
+{
+  "name": "tashkila-teams",
+  "version": "1.0.0",
+  "private": true,
+  "description": "تشكيلة: تشكيل فريقين متوازنين لكرة القدم على ملعب ثلاثي الأبعاد",
+  "type": "module",
+  "scripts": {
+    "dev": "node build.mjs --dev",
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/balance.test.ts",
+    "test:e2e": "python3 tests/e2e.py",
+    "icons": "node scripts/icons.mjs",
+    "android:init": "npx cap add android",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:open": "npx cap open android"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "esbuild": "^0.25.0",
+    "sharp": "^0.34.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}

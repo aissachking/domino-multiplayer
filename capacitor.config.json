@@ -1,0 +1,7 @@
+{
+  "appId": "app.tashkila.teams",
+  "appName": "تشكيلة",
+  "webDir": "dist",
+  "backgroundColor": "#070B0A",
+  "android": { "allowMixedContent": false }
+}
