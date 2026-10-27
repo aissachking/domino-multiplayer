@@ -48,7 +48,9 @@ class SeatChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: active ? Colors.white : Colors.white24, width: active ? 2 : 1),
         ),
-        child: Row(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
@@ -92,6 +94,7 @@ class SeatChip extends StatelessWidget {
               ],
             ),
           ],
+          ),
         ),
       ),
     );

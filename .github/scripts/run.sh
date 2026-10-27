@@ -9,6 +9,8 @@ status=${PIPESTATUS[0]}
 if [ "$status" -ne 0 ]; then
   tail_text="$(grep -vE '^\s*$' "$log" | tail -n 60 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"
   echo "::error title=${title} failed::${tail_text}"
+  key_text="$(grep -nE 'Expected|Actual|Error|error[: ]|Exception|description was|\.dart:[0-9]+:[0-9]+|FAILED|not ok|✗|❌' "$log" | head -n 120 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"
+  [ -n "$key_text" ] && echo "::error title=${title} key lines::${key_text}"
   {
     echo "### ❌ ${title}"
     echo '```'

@@ -231,7 +231,7 @@ class _GameScreenState extends State<GameScreen> {
             children: [
               // opponents
               SizedBox(
-                height: compact ? 58 : 66,
+                height: compact ? 62 : 72,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
