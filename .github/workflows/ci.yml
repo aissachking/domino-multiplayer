@@ -1,0 +1,84 @@
+name: CI
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: Node (engine, AI, backend)
+    runs-on: ubuntu-24.04
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: .github/scripts/run.sh "npm install" npm install --no-audit --no-fund
+      - name: Type check
+        run: .github/scripts/run.sh "Type check" npm run typecheck
+      - name: Game engine tests
+        run: .github/scripts/run.sh "Game engine tests" npm run test:engine
+      - name: Shared protocol tests
+        run: .github/scripts/run.sh "Shared tests" npm run test -w @daeef/shared
+      - name: AI tests
+        run: .github/scripts/run.sh "AI tests" npm run test:ai
+      - name: Backend tests (unit + Socket.IO integration)
+        run: .github/scripts/run.sh "Backend tests" npm run test:backend
+      - name: Production build
+        run: .github/scripts/run.sh "Production build" npm run build
+      - name: Backend health smoke test
+        run: |
+          PORT=3100 NODE_ENV=production npm start > /tmp/backend.log 2>&1 &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3100/health; then echo; echo "healthy"; exit 0; fi
+            sleep 1
+          done
+          echo "::error title=Smoke test failed::$(tail -n 30 /tmp/backend.log | sed ':a;N;$!ba;s/\n/%0A/g')"
+          exit 1
+
+  flutter:
+    name: Flutter (analyze, test, APK)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Flutter version
+        run: flutter --version
+      - name: Complete the Android project (keeps committed files)
+        working-directory: mobile
+        run: |
+          ../.github/scripts/run.sh "flutter create" flutter create --platforms=android --org com.daeef --project-name daeef_jiddan .
+          rm -f test/widget_test.dart
+      - name: Resolve dependencies
+        working-directory: mobile
+        run: ../.github/scripts/run.sh "flutter pub get" flutter pub get
+      - name: Analyze
+        working-directory: mobile
+        run: ../.github/scripts/run.sh "flutter analyze" flutter analyze --no-fatal-infos
+      - name: Tests
+        working-directory: mobile
+        run: ../.github/scripts/run.sh "flutter test" flutter test
+      - name: Build debug APK
+        working-directory: mobile
+        run: ../.github/scripts/run.sh "flutter build apk" flutter build apk --debug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: daeef-jiddan-debug-apk
+          path: mobile/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
