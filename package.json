@@ -28,6 +28,7 @@
     "esbuild": "^0.25.0",
     "sharp": "^0.34.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "@esbuild/linux-x64": "^0.25.0"
   }
 }
