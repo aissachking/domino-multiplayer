@@ -1,5 +1,48 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'screens/home_screen.dart';
-void main()=>runApp(const DominoApp());
-class DominoApp extends StatelessWidget{const DominoApp({super.key});@override Widget build(BuildContext context)=>MaterialApp(title:'ضعيف جدا',debugShowCheckedModeBanner:false,locale:const Locale('ar'),supportedLocales:const[Locale('ar'),Locale('en'),Locale('fr')],localizationsDelegates:const[GlobalMaterialLocalizations.delegate,GlobalWidgetsLocalizations.delegate,GlobalCupertinoLocalizations.delegate],theme:ThemeData(useMaterial3:true,colorSchemeSeed:const Color(0xff4f46e5)),home:const HomeScreen());}
+
+import 'l10n/app_localizations.dart';
+import 'state/settings_controller.dart';
+import 'ui/screens/home_screen.dart';
+import 'ui/theme.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final settings = await SettingsController.load();
+  runApp(DaeefApp(settings: settings));
+}
+
+class DaeefApp extends StatelessWidget {
+  const DaeefApp({super.key, required this.settings, this.home});
+
+  final SettingsController settings;
+
+  /// Overrides the start screen (used by tests).
+  final Widget? home;
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsScope(
+      controller: settings,
+      child: ListenableBuilder(
+        listenable: settings,
+        builder: (context, _) => MaterialApp(
+          onGenerateTitle: (context) => context.l10n.t('appName'),
+          debugShowCheckedModeBanner: false,
+          locale: settings.locale,
+          supportedLocales: S.supportedLocales,
+          localizationsDelegates: const [
+            S.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          theme: buildTheme(Brightness.light),
+          darkTheme: buildTheme(Brightness.dark),
+          themeMode: ThemeMode.system,
+          home: home ?? const HomeScreen(),
+        ),
+      ),
+    );
+  }
+}
