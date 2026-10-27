@@ -173,12 +173,17 @@ class RoundResultPanel extends StatelessWidget {
           key: ValueKey(matchOver ? 'match-over' : 'round-over'),
           margin: const EdgeInsets.all(16),
           elevation: 8,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                 Icon(matchOver ? Icons.emoji_events_rounded : Icons.flag_rounded, size: 44, color: kAccent),
                 Text(
                   matchOver ? l.t('matchOver') : l.t('roundOver'),
@@ -210,7 +215,16 @@ class RoundResultPanel extends StatelessWidget {
                       target: snapshot.targetScore,
                     ),
                 ],
-                const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 4, 18, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                 if (!matchOver) ...[
                   FilledButton(
                     key: const ValueKey('next-round'),
@@ -228,8 +242,10 @@ class RoundResultPanel extends StatelessWidget {
                   const SizedBox(height: 8),
                   OutlinedButton(key: const ValueKey('back-to-menu'), onPressed: onMenu, child: Text(l.t('backToMenu'))),
                 ],
-              ],
-            ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),

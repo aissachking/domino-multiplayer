@@ -148,6 +148,7 @@ void main() {
     await pumpApp(tester, home: GameScreen(session: finished, ownsSession: true));
     if (g.phase == Phase.roundOver) {
       expect(find.byKey(const ValueKey('round-over')), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const ValueKey('next-round')));
       await tester.tap(find.byKey(const ValueKey('next-round')));
       await tester.pump();
       expect(finished.state.round, 2);
