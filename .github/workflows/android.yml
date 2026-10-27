@@ -1,10 +1,10 @@
 # يبني ملف APK لتطبيق «تشكيلة» تلقائيًا، وينشره برابط تحميل مباشر ثابت:
-# https://github.com/<المالك>/tashkila/releases/latest/download/tashkila.apk
+# https://github.com/<المالك>/<المستودع>/releases/download/tashkila-apk/tashkila.apk
 name: بناء تطبيق Android
 
 on:
   push:
-    branches: [main]
+    branches: [main, tashkila]
   workflow_dispatch: {}
 
 permissions:
@@ -39,7 +39,8 @@ jobs:
       - name: نشر الإصدار
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: تشكيلة ${{ github.run_number }}
-          make_latest: true
+          tag_name: tashkila-apk
+          name: تطبيق تشكيلة (Android)
+          body: آخر نسخة من تطبيق «تشكيلة». حمّل tashkila.apk وثبّته على هاتفك.
+          make_latest: false
           files: tashkila.apk
