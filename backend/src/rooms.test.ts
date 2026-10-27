@@ -4,7 +4,7 @@ import { legalMoves, mulberry32 } from '@daeef/game-engine';
 import { AppError } from './errors.js';
 import { RateLimiter, SessionRegistry } from './identity.js';
 import { MemoryMatchRepository } from './repository.js';
-import { RoomManager } from './rooms.js';
+import { RoomManager, cryptoRandom } from './rooms.js';
 
 const code = (fn: () => unknown, expected: string) =>
   assert.throws(fn, (e: unknown) => (e instanceof AppError || (e as { code?: string })?.code !== undefined) && (e as { code: string }).code === expected);
@@ -22,6 +22,18 @@ function humanTurn(rooms: RoomManager, roomCode: string) {
   if (move) return rooms.act(roomCode, id, { type: 'play', ...move }, g.version);
   return rooms.act(roomCode, id, { type: g.stock.length ? 'draw' : 'pass' }, g.version);
 }
+
+test('the default (cryptographic) random source works for codes and deals', () => {
+  for (let i = 0; i < 1000; i++) {
+    const r = cryptoRandom();
+    assert.ok(r >= 0 && r < 1);
+  }
+  const rooms = new RoomManager();
+  const room = rooms.create('crypto-001', 'C');
+  rooms.addBot(room.code, 'crypto-001', 'easy');
+  rooms.start(room.code, 'crypto-001');
+  assert.equal(room.game!.players.length, 2);
+});
 
 test('creates rooms with unambiguous codes and rejects unknown codes', () => {
   const rooms = manager();

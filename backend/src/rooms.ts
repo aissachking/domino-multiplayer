@@ -1,4 +1,4 @@
-import { randomInt, randomUUID } from 'node:crypto';
+import { randomUUID, webcrypto } from 'node:crypto';
 import {
   type End,
   type GameState,
@@ -70,7 +70,11 @@ export type SweepEvent =
   | { type: 'closed'; room: Room };
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const cryptoRandom: RandomSource = () => randomInt(0, 2 ** 48) / 2 ** 48;
+/** Cryptographically secure float in [0, 1) with 53 bits of entropy. */
+export const cryptoRandom: RandomSource = () => {
+  const [hi, lo] = webcrypto.getRandomValues(new Uint32Array(2));
+  return ((hi >>> 5) * 67108864 + (lo >>> 6)) / 9007199254740992;
+};
 
 export class RoomManager {
   readonly rooms = new Map<string, Room>();
