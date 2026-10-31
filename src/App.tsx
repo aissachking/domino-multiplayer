@@ -3,9 +3,13 @@ import { balanceTeams } from './core/balance';
 import {
   balanceVerdict,
   buildMatch,
+  emptyMatch,
   matchKey,
   movePlayer,
+  placePlayer,
   relayout,
+  resizeMatch,
+  unplacePlayer,
   resetPositions,
   swapPlayers,
   switchTeam,
@@ -15,7 +19,7 @@ import { DEFAULT_SETTINGS, loadData, samplePlayers, saveData, uid, type AppData 
 import { POS_LABEL, type Match, type Player, type TeamId } from './core/types';
 import { renderMatchImage, tryShare } from './export/exportImage';
 import { PitchView } from './pitch/PitchView';
-import { IconBalance, IconBench, IconClose, IconImage, IconPin, IconReset, IconSave, IconShuffle, IconSwap } from './ui/icons';
+import { IconBalance, IconBench, IconClose, IconImage, IconPin, IconReset, IconSave, IconShuffle, IconSwap, IconTrash } from './ui/icons';
 import { LogoMark } from './ui/Logo';
 import { MatchPanel } from './ui/MatchPanel';
 import { PlayersPanel } from './ui/PlayersPanel';
@@ -25,17 +29,10 @@ type Tab = 'players' | 'match' | 'saved';
 
 function initialData(): AppData {
   const stored = loadData();
-  if (stored) return stored;
-  const players = samplePlayers();
+  if (stored) return { ...stored, match: stored.match ?? emptyMatch(stored.settings.teamSize, stored.settings.teams) };
+  // أول تشغيل: كل اللاعبين على الدكة بلون محايد
   const settings = { ...DEFAULT_SETTINGS };
-  const r = balanceTeams(players, { teamSize: settings.teamSize, seed: 42 });
-  return {
-    players,
-    locks: {},
-    settings,
-    match: buildMatch(players, r.teams, settings.teamSize, 'auto', settings.teams),
-    saved: [],
-  };
+  return { v: 2, players: samplePlayers(), locks: {}, settings, match: emptyMatch(settings.teamSize, settings.teams), saved: [] };
 }
 
 export default function App() {
@@ -67,6 +64,9 @@ export default function App() {
   const setMatch = (fn: (m: Match) => Match) => setData((d) => (d.match ? { ...d, match: fn(d.match) } : d));
 
   const activeCount = players.filter((p) => p.active).length;
+  const onPitch = useMemo(() => new Set(match?.players.map((p) => p.id) ?? []), [match]);
+  const pool = useMemo(() => players.filter((p) => p.active && !onPitch.has(p.id)), [players, onPitch]);
+  const placedCount = match?.players.length ?? 0;
 
   /* ---------- التوزيع ---------- */
   const form = (alternative: boolean) => {
@@ -167,8 +167,8 @@ export default function App() {
 
   /* ---------- الإعدادات ---------- */
   const setTeamSize = (n: number) => {
-    patch({ settings: { ...settings, teamSize: n } });
-    setStale(true);
+    setData((d) => ({ ...d, settings: { ...d.settings, teamSize: n }, match: d.match ? resizeMatch(d.match, n) : d.match }));
+    if (placedCount) setStale(true);
   };
   const setFormation = (id: string) => {
     patch({ settings: { ...settings, formationPref: { ...settings.formationPref, [settings.teamSize]: id } } });
@@ -200,7 +200,7 @@ export default function App() {
 
   /* ---------- التصدير ---------- */
   const exportImage = async () => {
-    if (!match) return;
+    if (!match || !placedCount) return;
     setBusy(true);
     try {
       const blob = await renderMatchImage(match, settings.showNumbers);
@@ -244,7 +244,7 @@ export default function App() {
           >
             <IconSave size={17} /> حفظ
           </button>
-          <button className="btn btn-outline" onClick={exportImage} disabled={!match || busy}>
+          <button className="btn btn-outline" onClick={exportImage} disabled={!placedCount || busy}>
             <IconImage size={17} /> صورة
           </button>
         </div>
@@ -266,15 +266,19 @@ export default function App() {
                   <i />
                   <span>{strength.b.score}</span>
                 </div>
-                <div className={`sb-verdict tone-${strength.v.tone}`}>
-                  {strength.v.label} · <span className="num">{strength.v.pct.toFixed(1)}٪</span>
-                </div>
+                {strength.a.starters + strength.b.starters > 0 ? (
+                  <div className={`sb-verdict tone-${strength.v.tone}`}>
+                    {strength.v.label} · <span className="num">{strength.v.pct.toFixed(1)}٪</span>
+                  </div>
+                ) : (
+                  <div className="sb-verdict">ضع اللاعبين في الملعب</div>
+                )}
               </div>
               <div className="sb-team sb-b" style={{ ['--tc' as string]: match.teams.B.color }}>
                 <span className="sb-name">{match.teams.B.name}</span>
                 <span className="sb-meta num">{strength.b.starters} لاعبين</span>
               </div>
-              <div className="sb-bar" aria-hidden="true">
+              <div className="sb-bar" aria-hidden="true" hidden={strength.a.starters + strength.b.starters === 0}>
                 <span
                   style={{
                     width: `${(strength.a.total / Math.max(0.01, strength.a.total + strength.b.total)) * 100}%`,
@@ -289,12 +293,32 @@ export default function App() {
           <div className="pitch-area">
             <PitchView
               match={match}
+              pool={pool}
+              teamSize={settings.teamSize}
               showNumbers={settings.showNumbers}
               selectedId={selected}
               locks={locks}
               animKey={animKey}
               onSelect={handleSelect}
-              onMove={(id, pos) => setMatch((m) => movePlayer(m, id, pos))}
+              onMove={(id, pos) => {
+                const before = match?.players.find((p) => p.id === id);
+                setMatch((m) => movePlayer(m, id, pos));
+                const team = pos.z < 0 ? 'A' : 'B';
+                if (before && match && before.team !== team) {
+                  if (locks[id]) patch({ locks: { ...locks, [id]: team } });
+                  say(`${before.name} انتقل إلى ${match.teams[team].name}`);
+                }
+              }}
+              onPlace={(id, pos) => {
+                const pl = players.find((p) => p.id === id);
+                if (pl) setMatch((m) => placePlayer(m, pl, pos));
+              }}
+              onUnplace={(id) => {
+                const mp = match?.players.find((p) => p.id === id);
+                setMatch((m) => unplacePlayer(m, id));
+                setSelected(null);
+                if (mp) say(`${mp.name} عاد إلى الدكة`);
+              }}
               onSwap={(a, b) => {
                 const pa = match?.players.find((p) => p.id === a);
                 const pb = match?.players.find((p) => p.id === b);
@@ -303,11 +327,6 @@ export default function App() {
                 if (pa && pb) say(`تبديل: ${pa.name} ↔ ${pb.name}`);
               }}
             />
-            {!match && (
-              <div className="pitch-empty">
-                <p>أضف اللاعبين ثم اضغط «شكّل الفريقين»</p>
-              </div>
-            )}
             {selectedMp && match && (
               <div className="selbar" role="toolbar" aria-label={`خيارات ${selectedMp.name}`}>
                 <div className="selbar-who">
@@ -357,24 +376,37 @@ export default function App() {
           )}
 
           <div className="actions">
-            <button className={`btn btn-brass btn-lg ${stale ? 'pulse' : ''}`} onClick={() => form(false)} disabled={busy}>
-              <IconBalance /> {busy ? 'جارٍ الموازنة…' : 'شكّل الفريقين'}
+            <button className={`btn btn-brass btn-lg act-main ${stale ? 'pulse' : ''}`} onClick={() => form(false)} disabled={busy}>
+              <IconBalance /> {busy ? 'جارٍ الموازنة…' : 'شكّل الفريقين تلقائيًا'}
             </button>
-            <button className="btn btn-outline btn-lg" onClick={() => form(true)} disabled={busy || !match}>
+            <button className="btn btn-outline" onClick={() => form(true)} disabled={busy || !placedCount}>
               <IconShuffle /> إعادة التوزيع
             </button>
             <button
-              className="btn btn-ghost btn-lg"
+              className="btn btn-ghost"
               onClick={() => {
                 setMatch(resetPositions);
                 say('عاد اللاعبون إلى مواقعهم');
               }}
-              disabled={!match}
+              disabled={!placedCount}
             >
-              <IconReset /> المواقع الأصلية
+              <IconReset /> المواقع
+            </button>
+            <button
+              className="btn btn-ghost"
+              onClick={() => {
+                setMatch((m) => ({ ...m, players: [] }));
+                setSelected(null);
+                say('عاد كل اللاعبين إلى الدكة');
+              }}
+              disabled={!placedCount}
+            >
+              <IconTrash size={17} /> إفراغ الملعب
             </button>
           </div>
-          <p className="stage-hint">اسحب اللاعب لتحريكه، وأفلته فوق لاعب آخر لتبديلهما. اضغط عليه لنقله أو تثبيته.</p>
+          <p className="stage-hint">
+            ضع اللاعب في نصف {settings.teams.B.name} أو نصف {settings.teams.A.name} فيأخذ لونه مباشرة. اسحبه إلى النصف الآخر لنقله، أو إلى الدكة لإخراجه.
+          </p>
         </section>
 
         <aside className="panel">
@@ -403,7 +435,7 @@ export default function App() {
               onToggleAll={(v) => patch({ players: players.map((p) => ({ ...p, active: v })) })}
               onClearExamples={() => {
                 const keep = players.filter((p) => !p.example);
-                setData((d) => ({ ...d, players: keep, match: null, locks: {} }));
+                setData((d) => ({ ...d, players: keep, match: emptyMatch(d.settings.teamSize, d.settings.teams), locks: {} }));
                 setSelected(null);
                 say('مُسحت الأسماء التجريبية');
               }}
@@ -422,7 +454,7 @@ export default function App() {
           {tab === 'saved' && (
             <SavedPanel
               saved={saved}
-              canSave={!!match}
+              canSave={placedCount > 0}
               onSave={saveLineup}
               onOpen={openLineup}
               onDelete={(id) => patch({ saved: saved.filter((s) => s.id !== id) })}

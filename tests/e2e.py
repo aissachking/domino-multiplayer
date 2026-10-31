@@ -40,7 +40,13 @@ async def desktop(b):
     await pg.wait_for_timeout(1800)
     await wait_saved(pg)
     s0 = await state(pg)
-    check('الحالة الأولية محفوظة محليًا', s0 and s0['match'] is not None)
+    check('البداية: الملعب فارغ وكل اللاعبين على الدكة',
+          s0 and s0['match'] is not None and len(s0['match']['players']) == 0 and await pg.locator('.pool-chip').count() == 14)
+    await pg.get_by_role('button', name='شكّل الفريقين تلقائيًا').click()
+    await pg.wait_for_timeout(1500)
+    await wait_saved(pg)
+    s0 = await state(pg)
+    check('التوزيع التلقائي يملأ الملعب ويفرغ الدكة', len(s0['match']['players']) == 14 and await pg.locator('.pool-chip').count() == 0)
 
     box = await canvas_box(pg)
     pl = await placed(pg)
@@ -99,7 +105,7 @@ async def desktop(b):
     def key(m):
         a = sorted(p['id'] for p in m['players'] if p['team'] == 'A')
         return ','.join(a)
-    await pg.get_by_role('button', name='شكّل الفريقين').click()
+    await pg.get_by_role('button', name='شكّل الفريقين تلقائيًا').click()
     await pg.wait_for_timeout(900)
     s4 = await state(pg)
     t4 = {p['id']: p['team'] for p in s4['match']['players']}
@@ -117,7 +123,7 @@ async def desktop(b):
     check('عرض الفارق بين الفريقين', '٪' in verdict, verdict)
 
     # إعادة المواقع الأصلية
-    await pg.get_by_role('button', name='المواقع الأصلية').click()
+    await pg.get_by_role('button', name='المواقع', exact=True).click()
     await wait_saved(pg)
     s5 = await state(pg)
     check('المواقع الأصلية تُستعاد', all(p['at'] == p['home'] for p in s5['match']['players']))
@@ -135,7 +141,7 @@ async def desktop(b):
     # تغيير العدد والتشكيلة: 11 لكل فريق مع 4-4-2
     await pg.get_by_role('tab', name='المباراة').click()
     await pg.get_by_role('button', name='ملعب كامل').click()
-    await pg.get_by_role('button', name='شكّل الفريقين').click()
+    await pg.get_by_role('button', name='شكّل الفريقين تلقائيًا').click()
     await pg.wait_for_timeout(900)
     await pg.locator('#formation').select_option(label='4-4-2')
     await wait_saved(pg)
@@ -151,7 +157,7 @@ async def desktop(b):
     await wait_saved(pg)
     await pg.get_by_role('tab', name='المباراة').click()
     await pg.get_by_role('button', name='سباعي').click()
-    await pg.get_by_role('button', name='شكّل الفريقين').click()
+    await pg.get_by_role('button', name='شكّل الفريقين تلقائيًا').click()
     await pg.wait_for_timeout(900)
     await pg.get_by_role('tab', name='المحفوظات').click()
     await pg.locator('.srow-open', has_text='مباراة الجمعة').click()
@@ -177,6 +183,26 @@ async def desktop(b):
     await ctx.close()
 
 
+async def touch_drag(cdp, pg, x0, y0, x1, y1, steps=14, shot=None):
+    await cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': x0, 'y': y0}]})
+    for i in range(1, steps + 1):
+        x = x0 + (x1 - x0) * i / steps
+        y = y0 + (y1 - y0) * i / steps
+        await cdp.send('Input.dispatchTouchEvent', {'type': 'touchMove', 'touchPoints': [{'x': x, 'y': y}]})
+        await pg.wait_for_timeout(16)
+    if shot:
+        await pg.wait_for_timeout(120)
+        await pg.screenshot(path=shot)
+    await cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+    await wait_saved(pg)
+
+
+async def team_of(pg, pid):
+    m = (await state(pg))['match']
+    p = next((p for p in m['players'] if p['id'] == pid), None)
+    return p and p['team']
+
+
 async def mobile(b):
     ctx = await b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
     pg = await ctx.new_page()
@@ -185,24 +211,52 @@ async def mobile(b):
     await pg.goto(URL)
     await pg.wait_for_timeout(1800)
     await wait_saved(pg)
-    s0 = await state(pg)
-    box = await canvas_box(pg)
-    pl = await placed(pg)
-    a = pl[len(pl) // 2]
+    await pg.screenshot(path=f'{OUT}/mob-start.png', full_page=True)
     cdp = await ctx.new_cdp_session(pg)
-    x0, y0 = box['x'] + a['x'], box['y'] + a['y'] - a['h'] * 0.5
-    await cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': x0, 'y': y0}]})
-    for i in range(1, 13):
-        await cdp.send('Input.dispatchTouchEvent', {'type': 'touchMove', 'touchPoints': [{'x': x0 - i * 4, 'y': y0 + i * 6}]})
-        await pg.wait_for_timeout(16)
-    await pg.screenshot(path=f'{OUT}/mob-drag.png')
-    await cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+    box = await canvas_box(pg)
+    players = (await state(pg))['players']
+    by_name = {p['name']: p['id'] for p in players}
+
+    async def chip(i):
+        c = pg.locator('.pool-chip').nth(i)
+        await c.scroll_into_view_if_needed()
+        bb = await c.bounding_box()
+        name = (await c.locator('.pool-name').inner_text()).strip()
+        return bb['x'] + bb['width'] / 2, bb['y'] + bb['height'] / 2, by_name[name]
+
+    await pg.evaluate('window.scrollTo(0, 0)')
+    box = await canvas_box(pg)
+    # لاعب إلى النصف العلوي ← البرتقالي (الفريق ب)
+    x0, y0, id1 = await chip(0)
+    box = await canvas_box(pg)
+    await touch_drag(cdp, pg, x0, y0, box['x'] + box['width'] * 0.4, box['y'] + box['height'] * 0.32, shot=f'{OUT}/mob-drag-top.png')
+    check('لاعب من الدكة إلى النصف العلوي يصبح برتقاليًا', await team_of(pg, id1) == 'B')
+    # لاعب إلى النصف السفلي ← الأصفر (الفريق أ)
+    x0, y0, id2 = await chip(0)
+    box = await canvas_box(pg)
+    await touch_drag(cdp, pg, x0, y0, box['x'] + box['width'] * 0.6, box['y'] + box['height'] * 0.72)
+    check('لاعب من الدكة إلى النصف السفلي يصبح أصفر', await team_of(pg, id2) == 'A')
+    # نقر على لاعب في الدكة ثم نقر على الملعب
+    c = pg.locator('.pool-chip').first
+    name3 = (await c.locator('.pool-name').inner_text()).strip()
+    await c.tap()
+    box = await canvas_box(pg)
+    await pg.touchscreen.tap(box['x'] + box['width'] * 0.25, box['y'] + box['height'] * 0.66)
     await wait_saved(pg)
-    s1 = await state(pg)
-    p0 = next(p for p in s0['match']['players'] if p['id'] == a['id'])
-    p1 = next(p for p in s1['match']['players'] if p['id'] == a['id'])
-    moved = abs(p0['at']['x'] - p1['at']['x']) + abs(p0['at']['z'] - p1['at']['z'])
-    check('السحب باللمس يغيّر الموقع', moved > 1, f'{moved:.1f}m')
+    check('النقر على لاعب ثم على الملعب يضعه هناك', await team_of(pg, by_name[name3]) == 'A')
+    # نقل اللاعب الأول من النصف العلوي إلى السفلي
+    pl = {p['id']: p for p in await placed(pg)}
+    a = pl[id1]
+    await touch_drag(cdp, pg, box['x'] + a['x'], box['y'] + a['y'] - a['h'] * 0.5,
+                     box['x'] + box['width'] * 0.75, box['y'] + box['height'] * 0.6, steps=20, shot=f'{OUT}/mob-cross.png')
+    check('عبور خط المنتصف يغيّر لون اللاعب تلقائيًا', await team_of(pg, id1) == 'A')
+    # إرجاع لاعب إلى الدكة
+    pl = {p['id']: p for p in await placed(pg)}
+    a = pl[id2]
+    tray = await pg.locator('.touchline').bounding_box()
+    await touch_drag(cdp, pg, box['x'] + a['x'], box['y'] + a['y'] - a['h'] * 0.5, tray['x'] + tray['width'] / 2, tray['y'] + tray['height'] / 2, steps=20)
+    check('السحب إلى الدكة يعيد اللاعب محايدًا', await team_of(pg, id2) is None and await pg.locator('.pool-chip').count() == 12)
+    await pg.screenshot(path=f'{OUT}/mob-manual.png')
     sw = await pg.evaluate('document.documentElement.scrollWidth')
     check('لا تمرير أفقي على الهاتف', sw <= 390, f'scrollWidth={sw}')
     check('لا أخطاء في الصفحة (الهاتف)', not errors, '; '.join(errors))

@@ -10,6 +10,7 @@ export interface Settings {
 }
 
 export interface AppData {
+  v?: number; // إصدار البيانات
   players: Player[];
   locks: Record<string, TeamId>;
   settings: Settings;
@@ -23,8 +24,8 @@ export const DEFAULT_SETTINGS: Settings = {
   teamSize: 7,
   formationPref: {},
   teams: {
-    A: { name: 'الأحمر', color: '#D7263D' },
-    B: { name: 'الأزرق', color: '#1B7FE0' },
+    A: { name: 'الأصفر', color: '#F4C430' },
+    B: { name: 'البرتقالي', color: '#FF7A1A' },
   },
   showNumbers: true,
 };
@@ -60,7 +61,14 @@ export function loadData(): AppData | null {
     if (!raw) return null;
     const d = JSON.parse(raw) as Partial<AppData>;
     if (!d || !Array.isArray(d.players)) return null;
+    // ترقية إلى الإصدار 2: يبدأ الجميع على الدكة المحايدة، وألوان الفريقين أصفر وبرتقالي
+    if ((d.v ?? 1) < 2) {
+      const old = d.settings?.teams;
+      if (d.settings && (!old || (old.A.color === '#D7263D' && old.B.color === '#1B7FE0'))) d.settings.teams = DEFAULT_SETTINGS.teams;
+      d.match = null;
+    }
     return {
+      v: 2,
       players: d.players,
       locks: d.locks ?? {},
       settings: { ...DEFAULT_SETTINGS, ...(d.settings ?? {}), teams: { ...DEFAULT_SETTINGS.teams, ...(d.settings?.teams ?? {}) } },

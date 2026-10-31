@@ -7,6 +7,9 @@ import type { Pos, TeamId, TeamInfo } from '../core/types';
 import { project, type Camera } from './camera';
 
 export const FONT = '"IBM Plex Sans Arabic", "Noto Sans Arabic", "Segoe UI", Tahoma, sans-serif';
+/** لون اللاعب قبل وضعه في أحد نصفي الملعب */
+export const NEUTRAL = '#8C979C';
+
 export const DISPLAY_FONT = '"Reem Kufi", "IBM Plex Sans Arabic", "Noto Kufi Arabic", Tahoma, sans-serif';
 
 export interface ScenePlayer {
@@ -21,9 +24,12 @@ export interface ScenePlayer {
   selected: boolean;
   locked: boolean;
   target: boolean; // هدف التبديل تحت اللاعب المسحوب
+  neutral?: boolean; // خارج الملعب: لون محايد
 }
 
 export interface SceneState {
+  activeHalf?: TeamId | null; // النصف الذي يُسحب فوقه لاعب الآن
+  halfLabels?: boolean;
   dims: PitchDims;
   teams: Record<TeamId, TeamInfo>;
   players: ScenePlayer[];
@@ -429,8 +435,8 @@ function drawFigure(ctx: CanvasRenderingContext2D, q: Placed, st: SceneState) {
   const { p, sx, H } = q;
   const u = H * 1.22; // المجسم النصفي أقصر، فنكبّره ليبقى واضحًا
   const lift = p.lift * H * 0.16;
-  const team = st.teams[p.team];
-  const kit = p.line === 'GK' ? keeperColor(p.team, st.teams) : team.color;
+  const team = p.neutral ? { name: '', color: NEUTRAL } : st.teams[p.team];
+  const kit = p.neutral ? NEUTRAL : p.line === 'GK' ? keeperColor(p.team, st.teams) : team.color;
   const light = luminance(kit) > 0.62;
   const hs = hash(p.id);
   const skin = SKINS[hs % SKINS.length];
@@ -594,7 +600,7 @@ function drawLabel(ctx: CanvasRenderingContext2D, q: Placed, st: SceneState, dpr
   ctx.fillStyle = 'rgba(6,10,9,0.78)';
   rr(ctx, bx, by, bw, bh, bh / 2);
   ctx.fill();
-  ctx.fillStyle = st.teams[p.team].color;
+  ctx.fillStyle = p.neutral ? NEUTRAL : st.teams[p.team].color;
   rr(ctx, bx + bh * 0.28, by + bh * 0.28, bh * 0.16, bh * 0.44, bh * 0.08);
   ctx.fill();
   ctx.fillStyle = '#F4F7F2';
@@ -610,6 +616,48 @@ function drawLabel(ctx: CanvasRenderingContext2D, q: Placed, st: SceneState, dpr
   ctx.direction = 'ltr';
 }
 
+/** اسم كل فريق مكتوب على نصفه، وتظليل النصف الذي يُسحب إليه لاعب */
+function drawHalves(ctx: CanvasRenderingContext2D, cam: Camera, st: SceneState) {
+  const W = st.dims.w / 2;
+  const L = st.dims.l / 2;
+  if (st.activeHalf) {
+    const sgn = st.activeHalf === 'A' ? -1 : 1;
+    ctx.beginPath();
+    for (const [x, z] of [
+      [-W, 0],
+      [W, 0],
+      [W, sgn * L],
+      [-W, sgn * L],
+    ] as [number, number][]) {
+      const q = project(cam, x, 0, z);
+      ctx.lineTo(q.sx, q.sy);
+    }
+    ctx.closePath();
+    ctx.fillStyle = st.teams[st.activeHalf].color;
+    ctx.globalAlpha = 0.16;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  if (!st.halfLabels) return;
+  for (const t of ['A', 'B'] as TeamId[]) {
+    const z = (t === 'A' ? -1 : 1) * L * 0.5;
+    const q = project(cam, 0, 0, z);
+    const fs = Math.max(12, Math.min(q.k * st.dims.w * 0.075, 46 * (cam.rect.w > 1200 ? 2 : 1)));
+    ctx.save();
+    ctx.translate(q.sx, q.sy);
+    ctx.scale(1, cam.portrait ? 0.62 : 0.75);
+    ctx.font = `700 ${Math.round(fs)}px ${DISPLAY_FONT}`;
+    ctx.direction = 'rtl';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.globalAlpha = st.activeHalf === t ? 0.75 : 0.32;
+    ctx.fillStyle = st.teams[t].color;
+    ctx.fillText(st.teams[t].name, 0, 0);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
 export function drawDynamic(ctx: CanvasRenderingContext2D, cam: Camera, st: SceneState, dpr: number): Placed[] {
   const placed = placePlayers(cam, st.players);
   ctx.save();
@@ -617,6 +665,7 @@ export function drawDynamic(ctx: CanvasRenderingContext2D, cam: Camera, st: Scen
   ctx.beginPath();
   ctx.rect(x, y, w, h);
   ctx.clip();
+  drawHalves(ctx, cam, st);
   for (const q of placed) drawShadow(ctx, q);
   for (const q of placed) drawFigure(ctx, q, st);
   if (cam.portrait) drawGoal(ctx, cam, st.dims, -1);

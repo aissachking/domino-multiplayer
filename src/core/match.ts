@@ -1,6 +1,6 @@
 import { fit, pickStarters } from './balance';
 import { resolveFormation } from './formations';
-import type { Match, MatchPlayer, Player, Slot, TeamId, TeamInfo, Vec2 } from './types';
+import type { Match, MatchPlayer, Player, Pos, Slot, TeamId, TeamInfo, Vec2 } from './types';
 
 export interface PitchDims {
   w: number; // العرض بالأمتار
@@ -163,8 +163,88 @@ export function matchKey(m: Match, symmetric: boolean): string {
 
 /* ---------- تعديلات يدوية بعد التوزيع ---------- */
 
+/** الفريق يتحدد بنصف الملعب: النصف القريب (z سالب) للفريق أ، والبعيد للفريق ب */
+export function teamAt(at: Vec2): TeamId {
+  return at.z < 0 ? 'A' : 'B';
+}
+
+/** يستنتج الخط من موقع اللاعب داخل نصف فريقه */
+export function inferLine(at: Vec2, team: TeamId, dims: PitchDims): Pos {
+  const half = dims.l / 2;
+  const fromGoal = team === 'A' ? at.z + half : half - at.z; // المسافة من مرمى الفريق
+  const f = fromGoal / half;
+  if (f < 0.1 && Math.abs(at.x) < (dims.w / 2) * 0.4) return 'GK';
+  if (f < 0.38) return 'DEF';
+  if (f < 0.7) return 'MID';
+  return 'ATT';
+}
+
+function freeNumber(m: Match, team: TeamId, exceptId?: string): number {
+  const used = new Set(m.players.filter((p) => p.team === team && p.id !== exceptId).map((p) => p.number));
+  let n = 1;
+  while (used.has(n)) n++;
+  return n;
+}
+
+/** يحرّك لاعبًا؛ إن عبر خط المنتصف ينتقل تلقائيًا إلى الفريق الآخر */
 export function movePlayer(m: Match, id: string, at: Vec2): Match {
-  return { ...m, players: m.players.map((p) => (p.id === id ? { ...p, at: { ...at } } : p)) };
+  const dims = pitchFor(m.teamSize);
+  return {
+    ...m,
+    players: m.players.map((p) => {
+      if (p.id !== id) return p;
+      const team = teamAt(at);
+      const changed = team !== p.team;
+      const taken = changed && m.players.some((o) => o.team === team && o.id !== id && o.number === p.number);
+      return {
+        ...p,
+        team,
+        bench: false,
+        at: { ...at },
+        home: changed || p.bench ? { ...at } : p.home,
+        line: inferLine(at, team, dims),
+        number: taken ? freeNumber(m, team, id) : p.number,
+      };
+    }),
+  };
+}
+
+/** ينقل لاعبًا من الدكة المحايدة إلى الملعب */
+export function placePlayer(m: Match, pl: Pick<Player, 'id' | 'name' | 'pos' | 'rating' | 'number'>, at: Vec2): Match {
+  if (m.players.some((p) => p.id === pl.id)) return movePlayer(m, pl.id, at);
+  const dims = pitchFor(m.teamSize);
+  const team = teamAt(at);
+  const clash = !pl.number || m.players.some((o) => o.team === team && o.number === pl.number);
+  const mp: MatchPlayer = {
+    id: pl.id,
+    name: pl.name,
+    pos: pl.pos,
+    rating: pl.rating,
+    number: clash ? freeNumber(m, team) : pl.number!,
+    team,
+    bench: false,
+    line: inferLine(at, team, dims),
+    home: { ...at },
+    at: { ...at },
+  };
+  return { ...m, players: [...m.players, mp] };
+}
+
+/** يعيد اللاعب إلى الدكة المحايدة */
+export function unplacePlayer(m: Match, id: string): Match {
+  return { ...m, players: m.players.filter((p) => p.id !== id) };
+}
+
+export function emptyMatch(teamSize: number, teams: Record<TeamId, TeamInfo>, formationId = 'auto'): Match {
+  return { teamSize, formationId, teams: { A: { ...teams.A }, B: { ...teams.B } }, players: [], createdAt: Date.now() };
+}
+
+/** تغيير مقاس الملعب مع الحفاظ على مواقع اللاعبين النسبية */
+export function resizeMatch(m: Match, teamSize: number): Match {
+  const a = pitchFor(m.teamSize);
+  const b = pitchFor(teamSize);
+  const sc = (v: Vec2) => ({ x: (v.x * b.w) / a.w, z: (v.z * b.l) / a.l });
+  return { ...m, teamSize, players: m.players.map((p) => ({ ...p, at: sc(p.at), home: sc(p.home) })) };
 }
 
 /** تبديل لاعبين: يتبادلان الفريق والموقع وخانة الاحتياط */

@@ -96,3 +96,32 @@ test('عدد فردي ولاعب واحد لكل فريق', () => {
   const r = balanceTeams(pool, { teamSize: 1, seed: 1 });
   assert.equal(r.teams.A.length + r.teams.B.length, 3);
 });
+
+import { emptyMatch, inferLine, movePlayer, placePlayer, unplacePlayer } from '../src/core/match';
+import { pitchFor } from '../src/core/match';
+
+test('الوضع اليدوي: الفريق يتحدد بنصف الملعب ويتغير عند العبور', () => {
+  const teams = DEFAULT_SETTINGS.teams;
+  let m = emptyMatch(7, teams);
+  const pl = { id: 'x', name: 'س', pos: 'MID' as const, rating: 7, number: undefined };
+  m = placePlayer(m, pl, { x: 0, z: 10 });
+  assert.equal(m.players[0].team, 'B');
+  m = movePlayer(m, 'x', { x: 3, z: -12 });
+  assert.equal(m.players[0].team, 'A');
+  assert.deepEqual(m.players[0].home, { x: 3, z: -12 });
+  m = unplacePlayer(m, 'x');
+  assert.equal(m.players.length, 0);
+});
+
+test('استنتاج الخط من الموقع يطابق خانات كل التشكيلات', () => {
+  const pool = samplePlayers();
+  for (const size of [3, 5, 7, 9, 11]) {
+    for (const fm of formationsFor(size)) {
+      const r = balanceTeams(pool, { teamSize: size, seed: 1 });
+      const m = buildMatch(pool, r.teams, size, fm.id, DEFAULT_SETTINGS.teams);
+      for (const p of m.players.filter((q) => !q.bench)) {
+        assert.equal(inferLine(p.home, p.team, pitchFor(size)), p.line, `${fm.id} ${p.line}`);
+      }
+    }
+  }
+});
