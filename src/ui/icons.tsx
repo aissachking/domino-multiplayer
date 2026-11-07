@@ -89,3 +89,11 @@ export const IconBench = ({ size }: P) => (
     <path d="M3 10h18M5 10v8M19 10v8M3 14h18" />
   </svg>
 );
+export const IconShare = ({ size }: P) => (
+  <svg {...base(size)}>
+    <circle cx="18" cy="5" r="2.6" />
+    <circle cx="6" cy="12" r="2.6" />
+    <circle cx="18" cy="19" r="2.6" />
+    <path d="m8.3 10.8 7.4-4.4M8.3 13.2l7.4 4.4" />
+  </svg>
+);

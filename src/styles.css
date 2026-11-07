@@ -1146,6 +1146,8 @@ select {
 }
 .modal-img {
   width: 100%;
+  max-height: 58svh;
+  object-fit: contain;
   border-radius: 12px;
   display: block;
 }

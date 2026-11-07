@@ -72,6 +72,20 @@ const writeHtml = {
   },
 };
 
+// حزم Capacitor تُستخدم داخل تطبيق Android فقط. إن لم تكن مثبتة (بناء محلي بلا إنترنت)
+// نستبدلها ببديل يتصرف كالمتصفح، فيبقى البناء ممكنًا دائمًا.
+const capacitorFallback = {
+  name: 'capacitor-fallback',
+  setup(build) {
+    build.onResolve({ filter: /^@capacitor\/(core|filesystem|share)$/ }, (args) => {
+      const dirs = [join(root, 'node_modules'), ...extra];
+      if (dirs.some((d) => existsSync(join(d, args.path, 'package.json')))) return undefined;
+      console.log(`(تنبيه) ${args.path} غير مثبتة: استُخدم البديل المحلي`);
+      return { path: join(root, 'src/native/capacitor-stub.ts') };
+    });
+  },
+};
+
 const options = {
   entryPoints: [join(root, 'src/main.tsx')],
   bundle: true,
@@ -85,7 +99,7 @@ const options = {
   legalComments: 'none',
   nodePaths: [join(root, 'node_modules'), ...extra],
   define: { 'process.env.NODE_ENV': JSON.stringify(dev ? 'development' : 'production') },
-  plugins: [writeHtml],
+  plugins: [capacitorFallback, writeHtml],
   logLevel: 'warning',
 };
 

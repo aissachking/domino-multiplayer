@@ -30,9 +30,21 @@ jobs:
         run: |
           npx cap add android
           npx cap sync android
+      - name: إعداد الحفظ في الهاتف ورقم الإصدار
+        run: |
+          M=android/app/src/main/AndroidManifest.xml
+          # إذن الكتابة للأجهزة القديمة (Android 10 وما قبله) فقط
+          sed -i 's#<application#<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />\n    <application android:requestLegacyExternalStorage="true"#' $M
+          # رقم إصدار يزيد مع كل بناء حتى يُثبَّت التحديث فوق النسخة السابقة
+          sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/; s/versionName \"1.0\"/versionName \"1.${{ github.run_number }}\"/" android/app/build.gradle
+          grep -n "requestLegacy\|WRITE_EXTERNAL" $M
+          grep -n "versionCode\|versionName" android/app/build.gradle
       - name: بناء APK
         working-directory: android
         run: |
+          # مفتاح توقيع ثابت: كل تحديث يُثبَّت فوق السابق دون حذف التطبيق وبياناته
+          mkdir -p ~/.android
+          cp ../android-keys/debug.keystore ~/.android/debug.keystore
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
           cp app/build/outputs/apk/debug/app-debug.apk ../tashkila.apk

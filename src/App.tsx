@@ -17,9 +17,10 @@ import {
 } from './core/match';
 import { DEFAULT_SETTINGS, loadData, samplePlayers, saveData, uid, type AppData } from './core/storage';
 import { POS_LABEL, type Match, type Player, type TeamId } from './core/types';
-import { renderMatchImage, tryShare } from './export/exportImage';
+import { renderMatchImage } from './export/exportImage';
+import { canShareImage, isNative, saveToPhone, shareImage } from './native/device';
 import { PitchView } from './pitch/PitchView';
-import { IconBalance, IconBench, IconClose, IconImage, IconPin, IconReset, IconSave, IconShuffle, IconSwap, IconTrash } from './ui/icons';
+import { IconBalance, IconBench, IconClose, IconImage, IconPin, IconReset, IconSave, IconShare, IconShuffle, IconSwap, IconTrash } from './ui/icons';
 import { LogoMark } from './ui/Logo';
 import { MatchPanel } from './ui/MatchPanel';
 import { PlayersPanel } from './ui/PlayersPanel';
@@ -42,7 +43,8 @@ export default function App() {
   const [animKey, setAnimKey] = useState(0);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ url: string; name: string } | null>(null);
+  const [preview, setPreview] = useState<{ url: string; name: string; blob: Blob } | null>(null);
+  const [saving, setSaving] = useState<'save' | 'share' | null>(null);
   const [stale, setStale] = useState(false); // تغيّرت الإعدادات منذ آخر توزيع
   const toastTimer = useRef<number>(0);
 
@@ -204,9 +206,11 @@ export default function App() {
     setBusy(true);
     try {
       const blob = await renderMatchImage(match, settings.showNumbers);
-      const name = `tashkila-${match.teams.A.name}-${match.teams.B.name}.png`.replace(/\s+/g, '-');
-      const shared = await tryShare(blob, name);
-      if (!shared) setPreview({ url: URL.createObjectURL(blob), name });
+      const d = new Date();
+      const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
+      const name = `tashkila-${stamp}.png`;
+      // نعرض المعاينة أولًا، والحفظ والمشاركة يتمّان بضغطة مباشرة من المستخدم
+      setPreview({ url: URL.createObjectURL(blob), name, blob });
     } catch {
       say('تعذّر إنشاء الصورة، حاول مرة أخرى');
     } finally {
@@ -487,10 +491,46 @@ export default function App() {
             </div>
             <img src={preview.url} alt="صورة الملعب والفريقين" className="modal-img" />
             <div className="modal-actions">
-              <a className="btn btn-brass" href={preview.url} download={preview.name}>
-                تنزيل الصورة
-              </a>
-              <span className="hint">على الهاتف يمكنك أيضًا الضغط مطوّلًا على الصورة لحفظها ومشاركتها عبر واتساب.</span>
+              <button
+                className="btn btn-brass btn-lg"
+                disabled={!!saving}
+                onClick={async () => {
+                  setSaving('save');
+                  try {
+                    const where = await saveToPhone(preview.blob, preview.name);
+                    say(isNative() ? `حُفظت الصورة في ${where}` : 'بدأ تنزيل الصورة');
+                  } catch {
+                    // إن تعذّر الحفظ المباشر نفتح قائمة المشاركة وفيها «حفظ»
+                    try {
+                      await shareImage(preview.blob, preview.name);
+                    } catch {
+                      say('تعذّر حفظ الصورة، جرّب «مشاركة»');
+                    }
+                  } finally {
+                    setSaving(null);
+                  }
+                }}
+              >
+                <IconSave size={18} /> {saving === 'save' ? 'جارٍ الحفظ…' : isNative() ? 'حفظ في الهاتف' : 'تنزيل الصورة'}
+              </button>
+              {canShareImage() && (
+                <button
+                  className="btn btn-outline btn-lg"
+                  disabled={!!saving}
+                  onClick={async () => {
+                    setSaving('share');
+                    try {
+                      await shareImage(preview.blob, preview.name);
+                    } catch {
+                      say('تعذّرت المشاركة، احفظ الصورة ثم أرسلها');
+                    } finally {
+                      setSaving(null);
+                    }
+                  }}
+                >
+                  <IconShare size={18} /> مشاركة (واتساب…)
+                </button>
+              )}
             </div>
           </div>
         </div>

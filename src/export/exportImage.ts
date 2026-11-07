@@ -182,18 +182,3 @@ export async function renderMatchImage(match: Match, showNumbers: boolean, title
 
   return new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('تعذّر إنشاء الصورة'))), 'image/png'));
 }
-
-/** يحاول المشاركة مباشرة من الهاتف؛ وإلا يعيد false لعرض المعاينة والتنزيل */
-export async function tryShare(blob: Blob, name: string): Promise<boolean> {
-  try {
-    const file = new File([blob], name, { type: 'image/png' });
-    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
-    if (nav.share && nav.canShare?.({ files: [file] })) {
-      await nav.share({ files: [file], title: 'تشكيلة المباراة' });
-      return true;
-    }
-  } catch (e) {
-    if ((e as Error)?.name === 'AbortError') return true;
-  }
-  return false;
-}
