@@ -84,7 +84,7 @@ export function PitchView(props: Props) {
   const kick = () => {
     const s = st.current;
     if (!s.raf) {
-      s.last = performance.now();
+      s.last = 0; // يُحدَّد من توقيت أول إطار نفسه
       s.raf = requestAnimationFrame(frame);
     }
   };
@@ -94,7 +94,10 @@ export function PitchView(props: Props) {
   function frame(now: number) {
     const s = st.current;
     s.raf = 0;
-    const dt = Math.min(0.05, (now - s.last) / 1000);
+    // على Android قد يسبق توقيتُ الإطار لحظةَ طلبه، فيخرج فرق الزمن سالبًا.
+    // الفرق السالب كان يقلب الحركة ويدفع قيمًا سالبة إلى الرسم فيختفي اللاعبون.
+    const raw = s.last ? (now - s.last) / 1000 : 0;
+    const dt = raw > 0 ? Math.min(raw, 0.05) : 1 / 60;
     s.last = now;
     const canvas = canvasRef.current;
     const p = propsRef.current;
@@ -149,6 +152,10 @@ export function PitchView(props: Props) {
       } else {
         d.x += (target.x - d.x) * k;
         d.z += (target.z - d.z) * k;
+        if (!Number.isFinite(d.x) || !Number.isFinite(d.z)) {
+          d.x = target.x;
+          d.z = target.z;
+        }
         if (Math.abs(target.x - d.x) + Math.abs(target.z - d.z) > 0.02) busy = true;
         else {
           d.x = target.x;
@@ -158,6 +165,7 @@ export function PitchView(props: Props) {
       const lt = dragging ? 1 : 0;
       let l = s.lift.get(mp.id) ?? 0;
       l += (lt - l) * (reduce ? 1 : 1 - Math.exp(-dt * 14));
+      l = Number.isFinite(l) ? Math.min(1, Math.max(0, l)) : lt;
       if (Math.abs(lt - l) > 0.01) busy = true;
       else l = lt;
       s.lift.set(mp.id, l);
@@ -202,8 +210,13 @@ export function PitchView(props: Props) {
     if (drag?.moved) busy = true;
     const activeHalf = drag?.moved && drag.pos && !drag.overTray && !drag.target ? teamAt(drag.pos) : null;
 
+    // نبدأ كل إطار بحالة رسم نظيفة حتى لا يؤثر خطأ إطار سابق على الإطارات التالية
+    if ('reset' in ctx && typeof (ctx as { reset?: () => void }).reset === 'function') (ctx as { reset: () => void }).reset();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
     ctx.drawImage(s.bg, 0, 0);
+    try {
     s.placed = drawDynamic(
       ctx,
       cam,
@@ -217,6 +230,11 @@ export function PitchView(props: Props) {
       },
       s.dpr,
     );
+    } catch (err) {
+      // لا نترك خطأ رسم واحد يوقف الحركة؛ نسجّله ونكمل في الإطار التالي
+      console.error('[tashkila] draw', err);
+      busy = true;
+    }
     // نقاط اللاعبين على الشاشة (تُستخدم في الاختبارات الآلية)
     (window as unknown as { __mizanPlaced?: unknown }).__mizanPlaced = s.placed.map((q) => ({
       id: q.p.id,

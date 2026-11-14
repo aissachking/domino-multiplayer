@@ -414,12 +414,12 @@ export function placePlayers(cam: Camera, players: ScenePlayer[]): Placed[] {
 
 function drawShadow(ctx: CanvasRenderingContext2D, q: Placed) {
   const { sx, sy, H } = q;
-  const lift = q.p.lift;
+  const lift = Math.min(1, Math.max(0, q.p.lift || 0));
   const spread = 1 + lift * 0.5;
   ctx.save();
   ctx.translate(sx + H * 0.1, sy + H * 0.01);
   ctx.scale(1, 0.32);
-  const r = H * 0.34 * spread;
+  const r = Math.max(0.5, H * 0.34 * spread);
   const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
   g.addColorStop(0, `rgba(0,0,0,${0.55 - lift * 0.25})`);
   g.addColorStop(1, 'rgba(0,0,0,0)');
@@ -433,8 +433,8 @@ function drawShadow(ctx: CanvasRenderingContext2D, q: Placed) {
 /** مجسم نصفي: قاعدة دائرية بلون الفريق، وعليها الكتفان بالقميص والرقم ثم الرأس */
 function drawFigure(ctx: CanvasRenderingContext2D, q: Placed, st: SceneState) {
   const { p, sx, H } = q;
-  const u = H * 1.22; // المجسم النصفي أقصر، فنكبّره ليبقى واضحًا
-  const lift = p.lift * H * 0.16;
+  const u = Math.max(1, H * 1.22); // المجسم النصفي أقصر، فنكبّره ليبقى واضحًا
+  const lift = Math.min(1, Math.max(0, p.lift || 0)) * H * 0.16;
   const team = p.neutral ? { name: '', color: NEUTRAL } : st.teams[p.team];
   const kit = p.neutral ? NEUTRAL : p.line === 'GK' ? keeperColor(p.team, st.teams) : team.color;
   const light = luminance(kit) > 0.62;
@@ -666,10 +666,20 @@ export function drawDynamic(ctx: CanvasRenderingContext2D, cam: Camera, st: Scen
   ctx.rect(x, y, w, h);
   ctx.clip();
   drawHalves(ctx, cam, st);
-  for (const q of placed) drawShadow(ctx, q);
-  for (const q of placed) drawFigure(ctx, q, st);
+  // كل لاعب يُرسم وحده: لو تعذّر رسم لاعب لا يختفي الباقون
+  const safe = (fn: () => void) => {
+    ctx.save();
+    try {
+      fn();
+    } catch (err) {
+      console.error('[tashkila] player', err);
+    }
+    ctx.restore();
+  };
+  for (const q of placed) safe(() => drawShadow(ctx, q));
+  for (const q of placed) safe(() => drawFigure(ctx, q, st));
   if (cam.portrait) drawGoal(ctx, cam, st.dims, -1);
-  for (const q of placed) drawLabel(ctx, q, st, dpr);
+  for (const q of placed) safe(() => drawLabel(ctx, q, st, dpr));
   // تعتيم الأطراف بلمسة سينمائية
   const vg = ctx.createRadialGradient(x + w / 2, y + h * 0.55, Math.min(w, h) * 0.35, x + w / 2, y + h / 2, Math.max(w, h) * 0.78);
   vg.addColorStop(0, 'rgba(0,0,0,0)');

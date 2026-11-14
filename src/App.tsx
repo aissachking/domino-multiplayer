@@ -7,12 +7,12 @@ import {
   matchKey,
   movePlayer,
   placePlayer,
-  relayout,
   resizeMatch,
   unplacePlayer,
   resetPositions,
   swapPlayers,
   switchTeam,
+  teamShape,
   teamStrength,
 } from './core/match';
 import { DEFAULT_SETTINGS, loadData, samplePlayers, saveData, uid, type AppData } from './core/storage';
@@ -82,11 +82,10 @@ export default function App() {
     setSelected(null);
     // نترك للواجهة فرصة عرض حالة الانتظار قبل الحساب
     window.setTimeout(() => {
-      const pref = settings.formationPref[settings.teamSize] ?? 'auto';
       const symmetric = !pool.some((p) => locks[p.id]);
       const avoidKey = alternative && match ? matchKey(match, symmetric) : undefined;
-      const r = balanceTeams(pool, { teamSize: settings.teamSize, formationPref: pref, locks, seed: Date.now(), avoidKey });
-      const m = buildMatch(pool, r.teams, settings.teamSize, pref, settings.teams);
+      const r = balanceTeams(pool, { teamSize: settings.teamSize, locks, seed: Date.now(), avoidKey });
+      const m = buildMatch(pool, r.teams, settings.teamSize, 'auto', settings.teams);
       setData((d) => ({ ...d, match: m }));
       setAnimKey((k) => k + 1);
       setStale(false);
@@ -171,10 +170,6 @@ export default function App() {
   const setTeamSize = (n: number) => {
     setData((d) => ({ ...d, settings: { ...d.settings, teamSize: n }, match: d.match ? resizeMatch(d.match, n) : d.match }));
     if (placedCount) setStale(true);
-  };
-  const setFormation = (id: string) => {
-    patch({ settings: { ...settings, formationPref: { ...settings.formationPref, [settings.teamSize]: id } } });
-    if (match && match.teamSize === settings.teamSize) setMatch((m) => relayout(m, id));
   };
   const setTeam = (t: TeamId, p: { name?: string; color?: string }) => {
     setData((d) => {
@@ -261,7 +256,13 @@ export default function App() {
               <div className="sb-team sb-a" style={{ ['--tc' as string]: match.teams.A.color }}>
                 <span className="sb-name">{match.teams.A.name}</span>
                 <span className="sb-meta num">
-                  {strength.a.starters} لاعبين
+                  {teamShape(match, 'A') ? (
+                    <>
+                      التشكيلة <bdi dir="ltr">{teamShape(match, 'A')}</bdi>
+                    </>
+                  ) : (
+                    `${strength.a.starters} لاعبين`
+                  )}
                 </span>
               </div>
               <div className="sb-center">
@@ -280,7 +281,15 @@ export default function App() {
               </div>
               <div className="sb-team sb-b" style={{ ['--tc' as string]: match.teams.B.color }}>
                 <span className="sb-name">{match.teams.B.name}</span>
-                <span className="sb-meta num">{strength.b.starters} لاعبين</span>
+                <span className="sb-meta num">
+                  {teamShape(match, 'B') ? (
+                    <>
+                      التشكيلة <bdi dir="ltr">{teamShape(match, 'B')}</bdi>
+                    </>
+                  ) : (
+                    `${strength.b.starters} لاعبين`
+                  )}
+                </span>
               </div>
               <div className="sb-bar" aria-hidden="true" hidden={strength.a.starters + strength.b.starters === 0}>
                 <span
@@ -450,7 +459,7 @@ export default function App() {
               settings={settings}
               activeCount={activeCount}
               onTeamSize={setTeamSize}
-              onFormation={setFormation}
+              shapes={match && placedCount ? { A: teamShape(match, 'A'), B: teamShape(match, 'B') } : null}
               onTeam={setTeam}
               onShowNumbers={(v) => patch({ settings: { ...settings, showNumbers: v } })}
             />

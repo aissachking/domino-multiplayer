@@ -143,12 +143,10 @@ async def desktop(b):
     await pg.get_by_role('button', name='ملعب كامل').click()
     await pg.get_by_role('button', name='شكّل الفريقين تلقائيًا').click()
     await pg.wait_for_timeout(900)
-    await pg.locator('#formation').select_option(label='4-4-2')
     await wait_saved(pg)
     s6 = await state(pg)
-    lines = [p['line'] for p in s6['match']['players'] if p['team'] == 'A' and not p['bench']]
-    check('تشكيلة 4-4-2 مطبّقة عند اكتمال العدد',
-          s6['match']['teamSize'] == 11 and lines.count('ATT') <= 2, f'{len(lines)} أساسيين')
+    st6 = [p for p in s6['match']['players'] if not p['bench']]
+    check('ملعب كامل: كل لاعب في خط مركزه', s6['match']['teamSize'] == 11 and all(p['line'] == p['pos'] for p in st6), f'{len(st6)} أساسيين')
 
     # الحفظ والفتح
     await pg.get_by_role('tab', name='المحفوظات').click()

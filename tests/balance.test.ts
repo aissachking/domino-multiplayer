@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { balanceTeams, evalTeam, rng, type BalanceInput } from '../src/core/balance';
-import { formationsFor, slotsOf } from '../src/core/formations';
 import { buildMatch, teamStrength, balanceVerdict, matchKey } from '../src/core/match';
 import { samplePlayers, DEFAULT_SETTINGS } from '../src/core/storage';
 import type { Pos } from '../src/core/types';
@@ -14,12 +13,6 @@ const POOL14 = mk([
   ['MID', 9], ['MID', 7], ['MID', 6], ['MID', 8],
   ['ATT', 9], ['ATT', 7], ['ATT', 6], ['ATT', 5],
 ]);
-
-test('كل تشكيل يحتوي عدد الخانات الصحيح', () => {
-  for (let n = 1; n <= 11; n++) {
-    for (const fm of formationsFor(n)) assert.equal(slotsOf(fm).length, n, fm.id);
-  }
-});
 
 test('كل اللاعبين موزعون بلا تكرار وبحجمين متقاربين', () => {
   const r = balanceTeams(POOL14, { teamSize: 7, seed: 1 });
@@ -113,15 +106,29 @@ test('الوضع اليدوي: الفريق يتحدد بنصف الملعب و�
   assert.equal(m.players.length, 0);
 });
 
-test('استنتاج الخط من الموقع يطابق خانات كل التشكيلات', () => {
+test('كل لاعب يوضع في خط مركزه الحقيقي، والموقع يطابق الخط', () => {
   const pool = samplePlayers();
-  for (const size of [3, 5, 7, 9, 11]) {
-    for (const fm of formationsFor(size)) {
-      const r = balanceTeams(pool, { teamSize: size, seed: 1 });
-      const m = buildMatch(pool, r.teams, size, fm.id, DEFAULT_SETTINGS.teams);
-      for (const p of m.players.filter((q) => !q.bench)) {
-        assert.equal(inferLine(p.home, p.team, pitchFor(size)), p.line, `${fm.id} ${p.line}`);
+  for (const size of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) {
+    for (const seed of [1, 2, 3]) {
+      const r = balanceTeams(pool, { teamSize: size, seed });
+      const m = buildMatch(pool, r.teams, size, 'auto', DEFAULT_SETTINGS.teams);
+      for (const t of ['A', 'B'] as const) {
+        const st = m.players.filter((p) => p.team === t && !p.bench);
+        assert.ok(st.length <= size);
+        assert.ok(st.filter((p) => p.line === 'GK').length <= 1);
+        for (const p of st) {
+          if (!(p.pos === 'GK' && p.line === 'DEF')) assert.equal(p.line, p.pos, `${size} ${p.name}`);
+          assert.equal(inferLine(p.home, p.team, pitchFor(size)), p.line, `موقع ${size} ${p.name}`);
+        }
       }
     }
   }
+});
+
+test('مهاجمون كثر ومدافع واحد: لا أحد يُنقل من مركزه', () => {
+  const pool = mk([['ATT', 9], ['ATT', 8], ['ATT', 8], ['ATT', 7], ['DEF', 5], ['DEF', 4], ['MID', 6], ['MID', 6]]);
+  const r = balanceTeams(pool, { teamSize: 4, seed: 9 });
+  const roster = pool.map((p) => ({ ...p, name: p.id, active: true }));
+  const m = buildMatch(roster, r.teams, 4, 'auto', DEFAULT_SETTINGS.teams);
+  for (const p of m.players.filter((q) => !q.bench)) assert.equal(p.line, p.pos);
 });

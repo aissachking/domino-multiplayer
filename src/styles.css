@@ -201,6 +201,9 @@ select {
 .sb-meta {
   font-size: 12px;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sb-center {
   text-align: center;
@@ -1176,4 +1179,24 @@ select {
     animation: none !important;
     transition: none !important;
   }
+}
+
+.shapes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.shape-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border-inline-start: 4px solid var(--tc);
+  font-size: 14px;
+}
+.shape-chip b {
+  font-family: var(--display);
+  font-size: 17px;
 }

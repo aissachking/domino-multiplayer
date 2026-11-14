@@ -1,5 +1,4 @@
 import { fit, pickStarters } from './balance';
-import { resolveFormation } from './formations';
 import type { Match, MatchPlayer, Player, Pos, Slot, TeamId, TeamInfo, Vec2 } from './types';
 
 export interface PitchDims {
@@ -32,13 +31,12 @@ export function clampToPitch(p: Vec2, dims: PitchDims, margin = 1.5): Vec2 {
 
 type Member = { id: string; name: string; pos: Player['pos']; rating: number; number?: number };
 
-/** يرتّب أعضاء فريق على التشكيل ويحسب المواقع الأصلية والأرقام */
-export function layoutTeam(members: Member[], team: TeamId, teamSize: number, pref: string): MatchPlayer[] {
+/** يرتّب أعضاء فريق: كل لاعب في خط مركزه، ويحسب المواقع الأصلية والأرقام */
+export function layoutTeam(members: Member[], team: TeamId, teamSize: number): MatchPlayer[] {
   const dims = pitchFor(teamSize);
   const n = Math.min(members.length, teamSize);
   if (n === 0) return [];
-  const fm = resolveFormation(n, pref);
-  const { starters, bench } = pickStarters(members, fm);
+  const { starters, bench } = pickStarters(members, n);
   const taken = new Set<number>(members.map((m) => m.number).filter((x): x is number => !!x));
   let next = 1;
   const nextNum = () => {
@@ -93,24 +91,18 @@ export function buildMatch(
     formationId,
     teams: { A: { ...info.A }, B: { ...info.B } },
     players: [
-      ...layoutTeam(pick(teams.A), 'A', teamSize, formationId),
-      ...layoutTeam(pick(teams.B), 'B', teamSize, formationId),
+      ...layoutTeam(pick(teams.A), 'A', teamSize),
+      ...layoutTeam(pick(teams.B), 'B', teamSize),
     ],
     createdAt: Date.now(),
   };
 }
 
-/** إعادة ترتيب التشكيل مع الإبقاء على أعضاء كل فريق (بعد تغيير التشكيل أو النقل اليدوي) */
-export function relayout(m: Match, formationId = m.formationId): Match {
-  const team = (t: TeamId) => m.players.filter((p) => p.team === t);
-  return {
-    ...m,
-    formationId,
-    players: [
-      ...layoutTeam(team('A'), 'A', m.teamSize, formationId),
-      ...layoutTeam(team('B'), 'B', m.teamSize, formationId),
-    ],
-  };
+/** شكل التشكيلة من الأساسيين: عدد الدفاع-الوسط-الهجوم، مثل 3-2-1 */
+export function teamShape(m: Match, t: TeamId): string {
+  const st = m.players.filter((p) => p.team === t && !p.bench);
+  const n = (l: Pos) => st.filter((p) => p.line === l).length;
+  return [n('DEF'), n('MID'), n('ATT')].filter((x) => x > 0).join('-');
 }
 
 export function resetPositions(m: Match): Match {

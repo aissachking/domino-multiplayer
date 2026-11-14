@@ -1,4 +1,3 @@
-import { formationsFor } from '../core/formations';
 import { TEAM_COLORS, type Settings } from '../core/storage';
 import type { TeamId } from '../core/types';
 import { IconMinus, IconPlus } from './icons';
@@ -7,20 +6,18 @@ export function MatchPanel({
   settings,
   activeCount,
   onTeamSize,
-  onFormation,
+  shapes,
   onTeam,
   onShowNumbers,
 }: {
   settings: Settings;
   activeCount: number;
   onTeamSize: (n: number) => void;
-  onFormation: (id: string) => void;
+  shapes: Record<TeamId, string> | null;
   onTeam: (t: TeamId, patch: { name?: string; color?: string }) => void;
   onShowNumbers: (v: boolean) => void;
 }) {
   const n = settings.teamSize;
-  const list = formationsFor(n);
-  const pref = settings.formationPref[n] ?? 'auto';
   const need = n * 2;
   const hint =
     activeCount < need
@@ -59,19 +56,19 @@ export function MatchPanel({
       </section>
 
       <section className="field">
-        <label className="field-label" htmlFor="formation">
-          التشكيلة
-        </label>
-        <select id="formation" className="input select" value={pref} onChange={(e) => onFormation(e.target.value)}>
-          <option value="auto">تلقائي ({list[0].label})</option>
-          {list.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.label}
-              {f.gk ? '' : ''}
-            </option>
-          ))}
-        </select>
-        <p className="hint">الأرقام تخص لاعبي الدفاع ثم الوسط ثم الهجوم، والحارس يُضاف تلقائيًا.</p>
+        <div className="field-label">التشكيلة</div>
+        <p className="hint">
+          التوزيع التلقائي يضع كل لاعب في خط مركزه: الحارس في المرمى، والمدافع في الدفاع، ولاعب الوسط في الوسط، والمهاجم في الهجوم. لتغيير مكان أي لاعب اسحبه بنفسك.
+        </p>
+        {shapes && (
+          <div className="shapes">
+            {(['A', 'B'] as TeamId[]).map((t) => (
+              <span key={t} className="shape-chip" style={{ ['--tc' as string]: settings.teams[t].color }}>
+                {settings.teams[t].name} <b className="num" dir="ltr">{shapes[t] || '—'}</b>
+              </span>
+            ))}
+          </div>
+        )}
       </section>
 
       {(['A', 'B'] as TeamId[]).map((t) => (

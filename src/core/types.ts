@@ -70,20 +70,6 @@ export interface SavedLineup {
   match: Match;
 }
 
-export interface FormationRow {
-  line: Exclude<Pos, 'GK'>;
-  count: number;
-  depth: number; // 0 = خط المرمى، 1 = خط المنتصف
-}
-
-export interface Formation {
-  id: string;
-  label: string;
-  size: number;
-  gk: boolean;
-  rows: FormationRow[];
-}
-
 export interface Slot {
   line: Pos;
   lateral: number; // -1..1

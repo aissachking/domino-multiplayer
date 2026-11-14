@@ -11,8 +11,7 @@
  * بتبديل لاعبين بين الفريقين حتى لا يبقى تبديل مفيد. نحتفظ بأفضل الحلول المختلفة
  * لنقدّم بديلًا متوازنًا عند الضغط على «إعادة التوزيع».
  */
-import { resolveFormation, slotsOf } from './formations';
-import type { Formation, Pos, Slot, TeamId } from './types';
+import type { Pos, Slot, TeamId } from './types';
 
 export interface BalanceInput {
   id: string;
@@ -22,7 +21,6 @@ export interface BalanceInput {
 
 export interface BalanceOptions {
   teamSize: number;
-  formationPref?: string;
   locks?: Record<string, TeamId>;
   seed?: number;
   avoidKey?: string; // مفتاح التوزيع الحالي لتجنّب تكراره
@@ -50,29 +48,62 @@ export interface Assigned<T extends BalanceInput> {
   bench: T[];
 }
 
-/** يوزّع أعضاء فريق على خانات التشكيل لتعظيم القوة الفعلية */
-export function pickStarters<T extends BalanceInput>(members: T[], fm: Formation): Assigned<T> {
-  const slots = slotsOf(fm);
-  const pairs: { pi: number; si: number; v: number }[] = [];
-  members.forEach((p, pi) =>
-    slots.forEach((s, si) => {
-      // مكافأة صغيرة للمركز الطبيعي حتى يُفضَّل عند التعادل
-      pairs.push({ pi, si, v: p.rating * fit(p.pos, s.line) + (p.pos === s.line ? 0.01 : 0) });
-    }),
-  );
-  pairs.sort((a, b) => b.v - a.v || a.pi - b.pi || a.si - b.si);
-  const usedP = new Set<number>();
-  const usedS = new Set<number>();
-  const starters: { p: T; slot: Slot; si: number }[] = [];
-  for (const pr of pairs) {
-    if (usedP.has(pr.pi) || usedS.has(pr.si)) continue;
-    usedP.add(pr.pi);
-    usedS.add(pr.si);
-    starters.push({ p: members[pr.pi], slot: slots[pr.si], si: pr.si });
+/**
+ * يختار الأساسيين عندما يزيد العدد عن المطلوب: أفضل حارس أولًا، ثم أفضل لاعب من كل خط
+ * (دفاع، وسط، هجوم) حتى لا يخلو خط، ثم الأعلى تقييمًا. البقية احتياط.
+ */
+export function chooseStarters<T extends BalanceInput>(members: T[], n: number): { starters: T[]; bench: T[] } {
+  const sorted = [...members].sort((a, b) => b.rating - a.rating || (a.id < b.id ? -1 : 1));
+  if (members.length <= n) return { starters: sorted, bench: [] };
+  const picked = new Set<T>();
+  const take = (p?: T) => {
+    if (p && picked.size < n) picked.add(p);
+  };
+  if (n > 1) take(sorted.find((p) => p.pos === 'GK'));
+  if (n >= 4) for (const line of ['DEF', 'MID', 'ATT'] as Pos[]) take(sorted.find((p) => p.pos === line && !picked.has(p)));
+  for (const p of sorted) if (p.pos !== 'GK' && !picked.has(p)) take(p);
+  for (const p of sorted) if (!picked.has(p)) take(p);
+  return { starters: sorted.filter((p) => picked.has(p)), bench: sorted.filter((p) => !picked.has(p)) };
+}
+
+const LINE_DEPTH: Record<'DEF' | 'MID' | 'ATT', number> = { DEF: 0.28, MID: 0.55, ATT: 0.84 };
+
+function spreadOf(c: number) {
+  return c >= 5 ? 0.86 : c === 4 ? 0.8 : c === 3 ? 0.66 : c === 2 ? 0.46 : 0;
+}
+
+/** يضع كل لاعب في خط مركزه الحقيقي: الحارس في المرمى، والمدافع في الدفاع، وهكذا */
+export function placeByPosition<T extends BalanceInput>(starters: T[]): { p: T; slot: Slot }[] {
+  const out: { p: T; slot: Slot }[] = [];
+  const gks = starters.filter((p) => p.pos === 'GK');
+  if (gks[0]) out.push({ p: gks[0], slot: { line: 'GK', lateral: 0, depth: 0.04 } });
+  // حارس إضافي (حين لا يوجد غيره) يلعب في الدفاع
+  const lines: Record<'DEF' | 'MID' | 'ATT', T[]> = {
+    DEF: [...gks.slice(1), ...starters.filter((p) => p.pos === 'DEF')],
+    MID: starters.filter((p) => p.pos === 'MID'),
+    ATT: starters.filter((p) => p.pos === 'ATT'),
+  };
+  for (const line of ['DEF', 'MID', 'ATT'] as const) {
+    const list = lines[line];
+    // خط مزدحم (أكثر من 5) يُقسم صفين متقاربين
+    const rows = list.length > 5 ? [list.slice(0, Math.ceil(list.length / 2)), list.slice(Math.ceil(list.length / 2))] : [list];
+    rows.forEach((row, ri) => {
+      const depth = LINE_DEPTH[line] + (rows.length === 2 ? (ri === 0 ? 0.06 : -0.06) : 0);
+      const c = row.length;
+      row.forEach((p, i) => {
+        const t = c === 1 ? 0 : (i / (c - 1)) * 2 - 1;
+        const bend = c >= 4 ? Math.abs(t) * 0.03 : 0;
+        out.push({ p, slot: { line, lateral: t * spreadOf(c), depth: depth + bend } });
+      });
+    });
   }
-  starters.sort((a, b) => a.si - b.si);
-  const bench = members.filter((_, i) => !usedP.has(i)).sort((a, b) => b.rating - a.rating);
-  return { starters: starters.map(({ p, slot }) => ({ p, slot })), bench };
+  return out;
+}
+
+/** الأساسيون في خطوطهم الحقيقية، والبقية احتياط */
+export function pickStarters<T extends BalanceInput>(members: T[], n: number): Assigned<T> {
+  const { starters, bench } = chooseStarters(members, n);
+  return { starters: placeByPosition(starters), bench };
 }
 
 export interface TeamEval {
@@ -84,7 +115,7 @@ export interface TeamEval {
   starters: number;
 }
 
-export function evalTeam(members: BalanceInput[], teamSize: number, pref = 'auto'): TeamEval {
+export function evalTeam(members: BalanceInput[], teamSize: number): TeamEval {
   const n = Math.min(members.length, teamSize);
   const ev: TeamEval = {
     total: 0,
@@ -96,8 +127,7 @@ export function evalTeam(members: BalanceInput[], teamSize: number, pref = 'auto
   };
   for (const m of members) ev.counts[m.pos]++;
   if (n === 0) return ev;
-  const fm = resolveFormation(n, pref);
-  const { starters, bench } = pickStarters(members, fm);
+  const { starters, bench } = pickStarters(members, n);
   for (const { p, slot } of starters) {
     const v = p.rating * fit(p.pos, slot.line);
     ev.total += v;
@@ -144,7 +174,6 @@ export function partitionKey(a: string[], b: string[], symmetric: boolean): stri
 
 export function balanceTeams(pool: BalanceInput[], opts: BalanceOptions): BalanceResult {
   const teamSize = Math.max(1, Math.min(11, opts.teamSize));
-  const pref = opts.formationPref ?? 'auto';
   const locks = opts.locks ?? {};
   const rand = rng(opts.seed ?? Date.now());
   const restarts = opts.restarts ?? (pool.length <= 14 ? 36 : pool.length <= 22 ? 20 : 12);
@@ -162,7 +191,7 @@ export function balanceTeams(pool: BalanceInput[], opts: BalanceOptions): Balanc
 
   const free = pool.filter((p) => !activeLocks[p.id]);
   const evalSplit = (A: BalanceInput[], B: BalanceInput[]) =>
-    costOf(evalTeam(A, teamSize, pref), evalTeam(B, teamSize, pref));
+    costOf(evalTeam(A, teamSize), evalTeam(B, teamSize));
 
   const order: Record<Pos, number> = { GK: 0, DEF: 1, MID: 2, ATT: 3 };
   const found = new Map<string, BalanceResult>();
